@@ -1,0 +1,181 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Release
+on:
+  repository_dispatch:
+    types: 
+      - create_release
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release_version'     
+        required: true
+        type: string
+        default: 'v0.1.0'
+jobs:
+  create_release:
+    runs-on: ubuntu-20.04
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - 
+        name: From_workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "RELEASE_VERSION=${{ github.event.inputs.release_version }}" >> $GITHUB_ENV
+      - 
+        name: From_repository_dispatch
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          echo "RELEASE_VERSION=${{ github.event.client_payload.release_version }}" >> $GITHUB_ENV
+      - 
+        name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_ACTION }}
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: ${{ env.RELEASE_VERSION }}
+          body_path: ${{ github.workspace }}/RELEASELOG.md
+          draft: false
+          prerelease: false
+  build_ubuntu:
+    strategy:
+      matrix:
+        include:
+          - 
+            docker_image_name: "python:3.10.14-bullseye"
+            release_file_os: "ubuntu_2004"
+          - 
+            docker_image_name: "python:3.10.14-bookworm"
+            release_file_os: "ubuntu_2204"
+    needs: create_release
+    runs-on: ubuntu-20.04
+    steps:
+      - 
+        name: Get variable
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "RELEASE_VERSION=${{ github.event.client_payload.release_version }}" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "RELEASE_VERSION=${{ github.event.inputs.release_version }}" >> $GITHUB_ENV
+          fi
+      - 
+        name: Set up git
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.GIT_ACTION }}
+      - 
+        name: Git clone
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'joe_wu@innodisk.com'
+          git config --global url."https://github-actions:${{ secrets.GIT_ACTION }}@github.com/".insteadOf "https://github.com/"
+          git clone --branch ${{ env.RELEASE_VERSION }} --depth 1 --recursive https://github-actions:${{ secrets.GIT_ACTION }}@github.com/InnoIPA/iVIT_AOI_R__confidential.git src
+          echo "RELEASE_FOLDER=iVIT_AOI_R_${{ env.RELEASE_VERSION }}" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_ACTION }}
+      - 
+        name: Create release folder
+        run: |
+          mkdir -p "${{ env.RELEASE_FOLDER }}"
+      - 
+        name: launcher.py package
+        run: |
+          RELEASE_VERSION="${{ env.RELEASE_VERSION }}"
+          IFS='.' read -ra num <<< "${RELEASE_VERSION#v}"
+          release_file_name=iVIT_AOI_R_v${num[0]}_${num[1]}_${num[2]}_${{ matrix.release_file_os }}
+          echo "RELEASE_FILE_NAME=$release_file_name" >> $GITHUB_ENV
+          
+          docker run --rm \
+            -v ${{ github.workspace }}/src:/workspace \
+            -w /workspace ${{ matrix.docker_image_name }} \
+            bash -c "pip3 install -r requirements.txt && \
+                     pyinstaller --clean --noconfirm -F \ 
+                     --name ${release_file_name} launcher.py"
+          
+          cp src/dist/$release_file_name ${{ env.RELEASE_FOLDER }}/
+          cp src/config.yaml ${{ env.RELEASE_FOLDER }}/
+          cp LICENSE ${{ env.RELEASE_FOLDER }}/
+          cp README.md ${{ env.RELEASE_FOLDER }}/
+          cp RELEASELOG.md ${{ env.RELEASE_FOLDER }}/
+      - 
+        name: Release inference server and triton_client
+        run: |
+          cd ${{ github.workspace }}/src/inference_backend_service/server/src/triton_client
+          ./build_src.sh
+          cd ${{ github.workspace }}/src/inference_backend_service/server
+          ./build_src.sh
+          cd ${{ github.workspace }}
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/src
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/docker_build ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/src/release/* ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/src/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/server.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/server.yaml
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/README.md
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/LICENSE ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/LICENSE
+      - 
+        name: Release watchdog
+        run: |
+          cd ${{ github.workspace }}/src/inference_backend_service/watchdog
+          ./build_src.sh
+          cd ${{ github.workspace }}
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/src
+          cp -r ${{ github.workspace }}/src/inference_backend_service/watchdog/docker ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/watchdog/src/release/* ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/src/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/watchdog/watchdog.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/watchdog.yaml
+          cp -r ${{ github.workspace }}/src/inference_backend_service/watchdog/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/README.md
+          cp -r ${{ github.workspace }}/src/inference_backend_service/watchdog/LICENSE ${{ env.RELEASE_FOLDER }}/inference_backend_service/watchdog/LICENSE
+      - 
+        name: Release cleardog
+        run: |
+          cd ${{ github.workspace }}/src/inference_backend_service/cleardog
+          ./build_src.sh
+          cd ${{ github.workspace }}
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/src
+          cp -r ${{ github.workspace }}/src/inference_backend_service/cleardog/docker ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/cleardog/src/release/* ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/src/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/cleardog/cleardog.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/cleardog.yaml
+          cp -r ${{ github.workspace }}/src/inference_backend_service/cleardog/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/README.md
+          cp -r ${{ github.workspace }}/src/inference_backend_service/cleardog/LICENSE ${{ env.RELEASE_FOLDER }}/inference_backend_service/cleardog/LICENSE
+      - 
+        name: Copy inference_backend_service/cold_database to release
+        run: |
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/cold_database/storage
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/cold_database/docker_tools/initialize/init_user
+          cp -r src/inference_backend_service/cold_database/docker_tools/initialize/init_user ${{ env.RELEASE_FOLDER }}/inference_backend_service/cold_database/docker_tools/initialize
+          cp -r src/inference_backend_service/cold_database/postgres.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/cold_database/postgres.yaml
+          cp -r src/inference_backend_service/cold_database/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/cold_database/README.md
+      - 
+        name: Copy inference_backend_service/hot_database to release
+        run: |
+          mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/hot_database/storage
+          cp -r src/inference_backend_service/hot_database/storage/.gitkeep ${{ env.RELEASE_FOLDER }}/inference_backend_service/hot_database/storage/.gitkeep
+          cp -r src/inference_backend_service/hot_database/redis.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/hot_database/redis.yaml
+          cp -r src/inference_backend_service/hot_database/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/hot_database/README.md
+      - 
+        name: Copy nginx to release
+        run: |
+          mkdir -p ${{ env.RELEASE_FOLDER }}/nginx_proxy
+          cp -r src/nginx_proxy/nginx.yaml ${{ env.RELEASE_FOLDER }}/nginx_proxy/nginx.yaml
+          cp -r src/nginx_proxy/nginx-config.template ${{ env.RELEASE_FOLDER }}/nginx_proxy/nginx-config.template
+          cp -r src/nginx_proxy/README.md ${{ env.RELEASE_FOLDER }}/nginx_proxy/README.md
+      - 
+        name: Release zip
+        run: |
+          release_version="${{ env.RELEASE_VERSION }}"
+          IFS='.' read -ra num <<< "${release_version#v}"
+          zip -r "${{ env.RELEASE_FILE_NAME }}.zip" "${{ env.RELEASE_FOLDER }}/"
+          echo "RELEASE_ZIP=${{ env.RELEASE_FILE_NAME }}.zip" >> $GITHUB_ENV
+      - 
+        name: Upload zip
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GIT_ACTION }}
+          tag_name: "${{ env.RELEASE_VERSION }}"
+          name: "${{ env.RELEASE_VERSION }}"
+          files: "./${{ env.RELEASE_ZIP }}"
+          
