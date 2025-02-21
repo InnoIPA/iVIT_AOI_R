@@ -30,6 +30,16 @@ jobs:
         run: |
           echo "RELEASE_VERSION=${{ github.event.client_payload.release_version }}" >> $GITHUB_ENV
       - 
+        name: Git clone
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'joe_wu@innodisk.com'
+          git config --global url."https://github-actions:${{ secrets.GIT_ACTION }}@github.com/".insteadOf "https://github.com/"
+          git clone --branch ${{ env.RELEASE_VERSION }} --depth 1 --recursive https://github-actions:${{ secrets.GIT_ACTION }}@github.com/InnoIPA/iVIT_AOI_R__confidential.git src
+          echo "RELEASE_FOLDER=iVIT_AOI_R_${{ env.RELEASE_VERSION }}" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_ACTION }}
+      - 
         name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -38,7 +48,7 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: ${{ env.RELEASE_VERSION }}
-          body_path: ${{ github.workspace }}/RELEASELOG.md
+          body_path: src/RELEASELOG.md
           draft: false
           prerelease: false
   build_ubuntu:
