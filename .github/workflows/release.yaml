@@ -105,8 +105,7 @@ jobs:
             -v ${{ github.workspace }}/src:/workspace \
             -w /workspace ${{ matrix.docker_image_name }} \
             bash -c "pip3 install -r requirements-package.txt && \
-                     pyinstaller --clean --noconfirm -F \ 
-                     --name ${release_file_name} launcher.py"
+                     pyinstaller --clean --noconfirm -F --name ${release_file_name} launcher.py"
           
           cp src/dist/$release_file_name ${{ env.RELEASE_FOLDER }}/
           cp src/config.yaml ${{ env.RELEASE_FOLDER }}/
