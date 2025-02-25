@@ -104,7 +104,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}/src:/workspace \
             -w /workspace ${{ matrix.docker_image_name }} \
-            bash -c "pip3 install -r requirements.txt && \
+            bash -c "pip3 install -r requirements-package.txt && \
                      pyinstaller --clean --noconfirm -F \ 
                      --name ${release_file_name} launcher.py"
           
