@@ -123,6 +123,7 @@ jobs:
           mkdir -p ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/src
           cp -r ${{ github.workspace }}/src/inference_backend_service/server/docker_build ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/
           cp -r ${{ github.workspace }}/src/inference_backend_service/server/src/release/* ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/src/
+          cp -r ${{ github.workspace }}/src/inference_backend_service/server/endpoint.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/endpoint.yaml
           cp -r ${{ github.workspace }}/src/inference_backend_service/server/server.yaml ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/server.yaml
           cp -r ${{ github.workspace }}/src/inference_backend_service/server/README.md ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/README.md
           cp -r ${{ github.workspace }}/src/inference_backend_service/server/LICENSE ${{ env.RELEASE_FOLDER }}/inference_backend_service/server/LICENSE
