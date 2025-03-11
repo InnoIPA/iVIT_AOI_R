@@ -94,7 +94,7 @@ jobs:
         run: |
           mkdir -p "${{ env.RELEASE_FOLDER }}"
       - 
-        name: launcher.py package
+        name: py package
         run: |
           RELEASE_VERSION="${{ env.RELEASE_VERSION }}"
           IFS='.' read -ra num <<< "${RELEASE_VERSION#v}"
@@ -107,7 +107,14 @@ jobs:
             bash -c "pip3 install -r requirements-package.txt && \
                      pyinstaller --clean --noconfirm -F --name ${release_file_name} launcher.py"
           
+          docker run --rm \
+            -v ${{ github.workspace }}/src:/workspace \
+            -w /workspace ${{ matrix.docker_image_name }} \
+            bash -c "pip3 install -r requirements-package.txt && \
+                     pyinstaller --clean --noconfirm -F --name install_images pull_all_images.py"
+          
           cp src/dist/$release_file_name ${{ env.RELEASE_FOLDER }}/
+          cp src/dist/install_images ${{ env.RELEASE_FOLDER }}/
           cp src/config.yaml ${{ env.RELEASE_FOLDER }}/
           cp LICENSE ${{ env.RELEASE_FOLDER }}/
           cp README.md ${{ env.RELEASE_FOLDER }}/
